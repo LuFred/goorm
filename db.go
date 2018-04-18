@@ -44,12 +44,14 @@ func (ac *_dbCache) getDefault() (al *alias) {
 }
 
 type alias struct {
-	Name       string
-	DriverName string
-	DB         *sqlbuilder.Database
+	Name         string
+	DriverName   string
+	DB           *sqlbuilder.Database
+	MaxIdleConns int
+	MaxOpenConns int
 }
 
-func RegisterDataBase(aliasName, driverName, host, database, user, pwd string) error {
+func RegisterDataBase(aliasName, driverName, host, database, user, pwd string, params ...int) error {
 
 	setting := &mysql.ConnectionURL{
 		User:     user,
@@ -62,11 +64,20 @@ func RegisterDataBase(aliasName, driverName, host, database, user, pwd string) e
 		err = fmt.Errorf("register db `%s`, %s", aliasName, err.Error())
 		return err
 	}
-	_, err = addAliasWthDB(aliasName, driverName, &db)
+	al, err := addAliasWthDB(aliasName, driverName, &db)
 	if err != nil {
 		err = fmt.Errorf("register db , %s", err.Error())
 		return err
 	}
+	for i, v := range params {
+		switch i {
+		case 0:
+			SetMaxIdleConns(al.Name, v)
+		case 1:
+			SetMaxOpenConns(al.Name, v)
+		}
+	}
+
 	return nil
 }
 
@@ -84,4 +95,18 @@ func addAliasWthDB(aliasName, driverName string, db *sqlbuilder.Database) (*alia
 		return nil, fmt.Errorf("DataBase alias name `%s` already registered, cannot reuse", aliasName)
 	}
 	return al, nil
+}
+
+// SetMaxOpenConns Change the max open conns for *sql.DB, use specify database alias name
+func SetMaxOpenConns(aliasName string, maxOpenConns int) {
+	al := getDbAlias(aliasName)
+	al.MaxOpenConns = maxOpenConns
+	(*al.DB).SetMaxOpenConns(maxOpenConns)
+}
+
+// SetMaxIdleConns Change the max idle conns for *sql.DB, use specify database alias name
+func SetMaxIdleConns(aliasName string, maxIdleConns int) {
+	al := getDbAlias(aliasName)
+	al.MaxIdleConns = maxIdleConns
+	(*al.DB).SetMaxIdleConns(maxIdleConns)
 }

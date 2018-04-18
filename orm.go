@@ -7,11 +7,16 @@ import (
 	"strconv"
 
 	upper "upper.io/db.v3"
+	"upper.io/db.v3/lib/sqlbuilder"
 )
 
 type orm struct {
 	alias *alias
 }
+
+// Cond is a map that defines conditions for a query and satisfies the
+// Constraints and Compound interfaces.
+type Cond map[interface{}]interface{}
 
 // NewOrm create new orm
 func NewOrm() OperateSet {
@@ -116,6 +121,7 @@ func (o *orm) Insert(model interface{}) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+
 	_id, err := (*o.alias.DB).Collection(mi.table).Insert(model)
 	if err != nil {
 		return 0, err
@@ -174,7 +180,7 @@ func (o *orm) Delete(model interface{}) (int64, error) {
 
 //Select
 //
-func (o *orm) Select(models interface{}, fields map[interface{}]interface{}) error {
+func (o *orm) Select(models interface{}, fields Cond) error {
 	val := reflect.ValueOf(models)
 	if val.Kind() != reflect.Ptr || reflect.Indirect(val).Kind() != reflect.Slice {
 		err := fmt.Errorf("<Orm> select:parameter `models` must be of type slice pointer")
@@ -201,7 +207,7 @@ func (o *orm) Select(models interface{}, fields map[interface{}]interface{}) err
 
 	return nil
 }
-func (o *orm) SelectLimit(models interface{}, fields map[interface{}]interface{}, offset int64, limit int64) error {
+func (o *orm) SelectLimit(models interface{}, fields Cond, offset int64, limit int64) error {
 	val := reflect.ValueOf(models)
 	if val.Kind() != reflect.Ptr || reflect.Indirect(val).Kind() != reflect.Slice {
 		err := fmt.Errorf("<Orm> select:parameter `models` must be of type slice pointer")
@@ -228,7 +234,7 @@ func (o *orm) SelectLimit(models interface{}, fields map[interface{}]interface{}
 
 	return nil
 }
-func (o *orm) One(model interface{}, fields map[interface{}]interface{}) error {
+func (o *orm) One(model interface{}, fields Cond) error {
 	mi, err := o.getMiInd(model)
 	if err != nil {
 		return err
@@ -248,7 +254,7 @@ func (o *orm) One(model interface{}, fields map[interface{}]interface{}) error {
 	}
 	return nil
 }
-func (o *orm) Count(model interface{}, fields map[interface{}]interface{}) (int64, error) {
+func (o *orm) Count(model interface{}, fields Cond) (int64, error) {
 	mi, err := o.getMiInd(model)
 	if err != nil {
 		return 0, err
@@ -266,4 +272,56 @@ func (o *orm) Count(model interface{}, fields map[interface{}]interface{}) (int6
 	}
 
 	return int64(c), nil
+}
+
+// QuerySQL executes a SQL query that returns rows
+//
+// Example:
+//
+//  QuerySQL(`SELECT * FROM people WHERE name = ?`,"zhangsan")
+func (o *orm) QuerySQL(dests interface{}, sql string, args ...interface{}) error {
+	val := reflect.ValueOf(dests)
+	if val.Kind() != reflect.Ptr || reflect.Indirect(val).Kind() != reflect.Slice {
+		err := fmt.Errorf("<Orm> select:parameter `dests` must be of type slice pointer")
+		return err
+	}
+	if reflect.Indirect(val).Type().Elem().Kind() == reflect.Ptr {
+		err := fmt.Errorf("<Orm> select:parameter `dests` is not allowed to be a pointer slice")
+		return err
+	}
+
+	rows, err := (*o.alias.DB).Query(sql, args...)
+	if err != nil {
+		return err
+	}
+	iter := sqlbuilder.NewIterator(rows)
+	err = iter.All(dests)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// ExecSQL executes a SQL query that returns single column
+//
+// Example:
+//
+//  ExecSQL(`SELECT count(1) FROM people WHERE name = ?`,"zhangsan")
+func (o *orm) ExecSQL(dest interface{}, sql string, args ...interface{}) error {
+	val := reflect.ValueOf(dest)
+	if val.Kind() != reflect.Ptr {
+		err := fmt.Errorf("<Orm> select:parameter `dest` must be of type pointer")
+		return err
+	}
+	rows, err := (*o.alias.DB).Query(sql, args...)
+	if err != nil {
+		return err
+	}
+	if rows.Next() {
+		err = rows.Scan(dest)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
