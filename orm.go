@@ -5,6 +5,7 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"strings"
 
 	upper "upper.io/db.v3"
 	"upper.io/db.v3/lib/sqlbuilder"
@@ -153,7 +154,7 @@ func (o *orm) Delete(model interface{}) (int64, error) {
 	var id interface{}
 	for i := 0; i < n; i++ {
 		if vtag, ok := typ.Field(i).Tag.Lookup("db"); ok {
-			if vtag == "id" {
+			if strings.ToLower(vtag) == "id" {
 				id = val.Field(i).Interface()
 				break
 			}
@@ -165,6 +166,9 @@ func (o *orm) Delete(model interface{}) (int64, error) {
 	findR := (*o.alias.DB).Collection(mi.table).Find(upper.Cond{
 		"id": id,
 	})
+	defer func() {
+		findR.Close()
+	}()
 	c, err := findR.Count()
 	if err != nil {
 		return 0, err
@@ -180,7 +184,7 @@ func (o *orm) Delete(model interface{}) (int64, error) {
 
 //Select
 //
-func (o *orm) Select(models interface{}, fields Cond) error {
+func (o *orm) Select(models interface{}, fields Cond, orderby ...interface{}) error {
 	val := reflect.ValueOf(models)
 	if val.Kind() != reflect.Ptr || reflect.Indirect(val).Kind() != reflect.Slice {
 		err := fmt.Errorf("<Orm> select:parameter `models` must be of type slice pointer")
@@ -200,14 +204,21 @@ func (o *orm) Select(models interface{}, fields Cond) error {
 			sele[k] = v
 		}
 	}
-	err = (*o.alias.DB).Collection(mi.table).Find(sele).All(models)
+	if len(orderby) > 0 {
+		err = (*o.alias.DB).Collection(mi.table).Find(sele).OrderBy(orderby...).All(models)
+	} else {
+		err = (*o.alias.DB).Collection(mi.table).Find(sele).All(models)
+	}
 	if err != nil {
 		return err
 	}
 
 	return nil
 }
-func (o *orm) SelectLimit(models interface{}, fields Cond, offset int64, limit int64) error {
+func (o *orm) SelectLimit(models interface{}, fields Cond, offset int64, limit int64, orderby ...interface{}) error {
+	if limit < 1 {
+		return nil
+	}
 	val := reflect.ValueOf(models)
 	if val.Kind() != reflect.Ptr || reflect.Indirect(val).Kind() != reflect.Slice {
 		err := fmt.Errorf("<Orm> select:parameter `models` must be of type slice pointer")
@@ -227,7 +238,11 @@ func (o *orm) SelectLimit(models interface{}, fields Cond, offset int64, limit i
 			sele[k] = v
 		}
 	}
-	err = (*o.alias.DB).Collection(mi.table).Find(sele).Offset(int(offset)).Limit(int(limit)).All(models)
+	if len(orderby) > 0 {
+		err = (*o.alias.DB).Collection(mi.table).Find(sele).OrderBy(orderby...).Offset(int(offset)).Limit(int(limit)).All(models)
+	} else {
+		err = (*o.alias.DB).Collection(mi.table).Find(sele).Offset(int(offset)).Limit(int(limit)).All(models)
+	}
 	if err != nil {
 		return err
 	}
@@ -294,12 +309,34 @@ func (o *orm) QuerySQL(dests interface{}, sql string, args ...interface{}) error
 	if err != nil {
 		return err
 	}
+	defer func() {
+		rows.Close()
+	}()
 	iter := sqlbuilder.NewIterator(rows)
 	err = iter.All(dests)
 	if err != nil {
 		return err
 	}
 	return nil
+}
+
+// Exec  executes a SQL that returns rows
+//
+// Example:
+//
+//  Exec(`DELETE FROM tb_user WHERE id = ?`, 5)
+func (o *orm) Exec(sql string, args ...interface{}) (int64, error) {
+	rows, err := (*o.alias.DB).Exec(sql, args...)
+
+	if err != nil {
+		return 0, err
+	}
+	affected, err := rows.RowsAffected()
+
+	if err != nil {
+		return 0, err
+	}
+	return affected, nil
 }
 
 // ExecSQL executes a SQL query that returns single column
@@ -317,11 +354,15 @@ func (o *orm) ExecSQL(dest interface{}, sql string, args ...interface{}) error {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		rows.Close()
+	}()
 	if rows.Next() {
 		err = rows.Scan(dest)
 		if err != nil {
 			return err
 		}
 	}
+
 	return nil
 }

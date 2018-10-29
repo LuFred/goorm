@@ -61,11 +61,21 @@ func RegisterDataBase(aliasName, driverName, host, database, user, pwd string, p
 	}
 	db, err := mysql.Open(setting)
 	if err != nil {
+		go func() {
+			if db != nil {
+				db.Close()
+			}
+		}()
 		err = fmt.Errorf("register db `%s`, %s", aliasName, err.Error())
 		return err
 	}
 	al, err := addAliasWthDB(aliasName, driverName, &db)
 	if err != nil {
+		go func() {
+			if db != nil {
+				db.Close()
+			}
+		}()
 		err = fmt.Errorf("register db , %s", err.Error())
 		return err
 	}
