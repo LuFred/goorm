@@ -10,6 +10,7 @@ import (
 
 var (
 	dataBaseCache = &_dbCache{cache: make(map[string]*alias)}
+	logging       = false
 )
 
 // database alias cacher.
@@ -79,6 +80,7 @@ func RegisterDataBase(aliasName, driverName, host, database, user, pwd string, p
 		err = fmt.Errorf("register db , %s", err.Error())
 		return err
 	}
+	setLogging(al.Name, logging)
 	for i, v := range params {
 		switch i {
 		case 0:
@@ -107,6 +109,12 @@ func addAliasWthDB(aliasName, driverName string, db *sqlbuilder.Database) (*alia
 	return al, nil
 }
 
+// setLogging enables or disables logging.
+func setLogging(aliasName string, isLogging bool) {
+	al := getDbAlias(aliasName)
+	(*al.DB).SetLogging(isLogging)
+}
+
 // SetMaxOpenConns Change the max open conns for *sql.DB, use specify database alias name
 func SetMaxOpenConns(aliasName string, maxOpenConns int) {
 	al := getDbAlias(aliasName)
@@ -119,4 +127,9 @@ func SetMaxIdleConns(aliasName string, maxIdleConns int) {
 	al := getDbAlias(aliasName)
 	al.MaxIdleConns = maxIdleConns
 	(*al.DB).SetMaxIdleConns(maxIdleConns)
+}
+
+// SetLogging enables or disables logging.
+func SetLogging(islogging bool) {
+	logging = islogging
 }
