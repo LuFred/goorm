@@ -133,3 +133,6 @@ func SetMaxIdleConns(aliasName string, maxIdleConns int) {
 func SetLogging(islogging bool) {
 	logging = islogging
 }
+
+
+

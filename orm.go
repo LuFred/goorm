@@ -1,12 +1,12 @@
 package goorm
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"reflect"
 	"strconv"
 	"strings"
-
 	upper "upper.io/db.v3"
 	"upper.io/db.v3/lib/sqlbuilder"
 )
@@ -20,13 +20,24 @@ type orm struct {
 type Cond map[interface{}]interface{}
 
 // NewOrm create new orm
-func NewOrm() OperateSet {
+func NewOrm() IOrm {
 	o := new(orm)
 	err := o.Using("default")
 	if err != nil {
 		panic(err)
 	}
 	return o
+}
+
+func(o *orm) newTx(context context.Context)(ITx,error){
+	tx:=&Transaction{}
+	upperTx,err:=(*o.alias.DB).NewTx(context)
+	if err!=nil{
+		return tx,err
+	}
+	tx.Tx=upperTx
+	tx.o=o
+	return tx,nil
 }
 
 // switch to another registered database driver by given name.
@@ -215,6 +226,7 @@ func (o *orm) Select(models interface{}, fields Cond, orderby ...interface{}) er
 
 	return nil
 }
+
 func (o *orm) SelectLimit(models interface{}, fields Cond, offset int64, limit int64, orderby ...interface{}) error {
 	if limit < 1 {
 		return nil
@@ -269,6 +281,7 @@ func (o *orm) One(model interface{}, fields Cond) error {
 	}
 	return nil
 }
+
 func (o *orm) Count(model interface{}, fields Cond) (int64, error) {
 	mi, err := o.getMiInd(model)
 	if err != nil {
@@ -364,5 +377,40 @@ func (o *orm) ExecSQL(dest interface{}, sql string, args ...interface{}) error {
 		}
 	}
 
+	return nil
+}
+
+
+
+// Tx exec transaction
+//
+// Example:
+//
+// err:=o.Tx(nil,func(tx goorm.ITx)error{
+//			_,err:=tx.Delete()...
+//			if err!=nil{
+//				return err
+//			}
+//			_,err:=tx.Insert()...
+//			if err!=nil{
+//				return err
+//			}
+//			return nil
+//		}
+func (o *orm)Tx(context context.Context,fn func(tx ITx) error) error{
+	tx,err:=o.newTx(context)
+	if err!=nil{
+		return err
+	}
+	err=fn(tx)
+	if err!=nil{
+		rerr:=tx.Rollback()
+		if rerr!=nil{
+			return rerr
+		}
+		return err
+	}else{
+		return tx.Commit()
+	}
 	return nil
 }
