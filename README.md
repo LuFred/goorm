@@ -1,6 +1,6 @@
 # goorm
 一个简单的数据库crud操作库  
-借鉴了[beego/orm](github.com/astaxie/beego/orm)的对象注册写法对[upper](https://upper.io/) 这款数据访问框架的二次封装
+对[upper](https://upper.io/) 这数据访问框架的二次封装
 
 
 
